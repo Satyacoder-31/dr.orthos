@@ -30,22 +30,44 @@
     highlightNav();
   };
 
-  /* ---------- Active nav link ---------- */
-  const navLinks = document.querySelectorAll('.nav-link');
-  const sections = [...navLinks].map((l) => {
-    const href = l.getAttribute('href');
-    return href && href.startsWith('#') ? document.querySelector(href) : null;
-  }).filter(Boolean);
+  /* ---------- Active nav link & dropdown highlighting ---------- */
+  const navLinks = document.querySelectorAll('.nav-link[href^="#"]');
+  const dropdownTrigger = document.querySelector('.nav-dropdown-trigger');
+  const sectionIds = ['home', 'about', 'doctor', 'services', 'schedule', 'videos', 'gallery', 'blogs', 'faq', 'contact'];
+  const sections = sectionIds.map((id) => document.getElementById(id)).filter(Boolean);
+  const patientHubSections = ['videos', 'gallery', 'blogs', 'faq'];
 
   function highlightNav() {
-    const pos = window.scrollY + 130;
-    let current = sections[0]?.getAttribute('id');
+    const pos = window.scrollY + 140;
+    let current = 'home';
     sections.forEach((sec) => {
       if (pos >= sec.offsetTop) current = sec.getAttribute('id');
     });
+
     navLinks.forEach((l) => {
       const href = l.getAttribute('href');
       l.classList.toggle('active', href === '#' + current);
+    });
+
+    if (dropdownTrigger) {
+      dropdownTrigger.classList.toggle('active', patientHubSections.includes(current));
+    }
+  }
+
+  /* ---------- Dropdown toggle for touch / click ---------- */
+  const patientHubDropdown = document.getElementById('patientHubDropdown');
+  if (dropdownTrigger && patientHubDropdown) {
+    dropdownTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      patientHubDropdown.classList.toggle('open');
+      const isOpen = patientHubDropdown.classList.contains('open');
+      dropdownTrigger.setAttribute('aria-expanded', String(isOpen));
+    });
+    document.addEventListener('click', (e) => {
+      if (!patientHubDropdown.contains(e.target)) {
+        patientHubDropdown.classList.remove('open');
+        dropdownTrigger.setAttribute('aria-expanded', 'false');
+      }
     });
   }
 
@@ -67,7 +89,12 @@
       hamburger.classList.toggle('open', open);
       hamburger.setAttribute('aria-expanded', String(open));
     });
-    navLinks.forEach((l) => l.addEventListener('click', closeMenu));
+    document.querySelectorAll('.nav-link, .m-link, .dropdown-item').forEach((l) => {
+      l.addEventListener('click', () => {
+        closeMenu();
+        if (patientHubDropdown) patientHubDropdown.classList.remove('open');
+      });
+    });
     document.addEventListener('click', (e) => {
       if (navList.classList.contains('open') && !navList.contains(e.target) && !hamburger.contains(e.target)) {
         closeMenu();
