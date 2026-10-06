@@ -257,6 +257,23 @@
       const slot = document.getElementById('fSlot').value;
       const message = document.getElementById('fMsg').value.trim();
 
+      // Persist to central store for the single admin portal
+      if (window.OrthosStore) {
+        window.OrthosStore.saveAppointment({
+          name: name,
+          phone: phone,
+          location: location,
+          service: service,
+          date: date,
+          slot: slot,
+          message: message,
+          status: 'pending'
+        });
+      }
+
+      const settings = window.OrthosStore ? window.OrthosStore.getSettings() : null;
+      const targetPhone = (settings && settings.whatsappNumber) ? settings.whatsappNumber : PHONE;
+
       const lines = [
         'New Appointment Request — DocOrthos / ORTHOS OPD',
         '--------------------------------------------',
@@ -269,7 +286,7 @@
         message ? 'Symptoms / Details: ' + message : ''
       ].filter(Boolean);
 
-      const waUrl = 'https://wa.me/' + PHONE + '?text=' + encodeURIComponent(lines.join('\n'));
+      const waUrl = 'https://wa.me/' + targetPhone + '?text=' + encodeURIComponent(lines.join('\n'));
       window.open(waUrl, '_blank', 'noopener');
 
       if (success) success.hidden = false;
@@ -311,8 +328,24 @@
   /* ---------- Helper: Location Selector from Schedule Cards ---------- */
   window.selectLocationInForm = function (locName) {
     const locSelect = document.getElementById('fLocation');
+    const slotSelect = document.getElementById('fSlot');
     if (locSelect) {
-      locSelect.value = locName;
+      if (locName.includes('Apollo')) {
+        locSelect.value = 'Apollo Hospitals Navi Mumbai (CBD Belapur)';
+      } else {
+        locSelect.value = 'ORTHOS @ KRSNAA DIAGNOSTICS (Seawoods West)';
+      }
+    }
+    if (slotSelect) {
+      if (locName.includes('Apollo')) {
+        slotSelect.value = 'Apollo Hospitals Slot (10:00 AM – 3:00 PM Every Day)';
+      } else {
+        slotSelect.value = 'Orthos Clinic Slot (3:30 PM – 6:00 PM Every Day)';
+      }
+    }
+    const formElement = document.getElementById('appointmentForm');
+    if (formElement) {
+      formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   };
 
@@ -610,7 +643,13 @@
   ];
 
   window.openBlogModal = function (idx) {
-    const item = blogArticles[idx];
+    const list = window.OrthosStore ? window.OrthosStore.getBlogs() : blogArticles;
+    let item = null;
+    if (typeof idx === 'number') {
+      item = list[idx];
+    } else {
+      item = list.find(b => b.id === idx) || list[0];
+    }
     if (!item) return;
 
     document.getElementById('bmTitle').textContent = item.title;
@@ -620,12 +659,96 @@
         <img src="${item.img}" alt="${item.title}" style="width:100%;height:100%;object-fit:cover;" />
       </div>
       <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">
-        ${item.author} · ${item.category} · ${item.readTime}
+        ${item.author || 'Dr. Prashant Agrawal'} · ${item.category} · ${item.readTime || '5 min read'}
       </div>
       <div>${item.content}</div>
     `;
     showModal('blogModalBackdrop');
   };
+
+  /* ---------- Dynamic Store Rendering ---------- */
+  function renderLiveAnnouncement() {
+    const banner = document.getElementById('siteAnnouncementBanner');
+    if (!banner || !window.OrthosStore) return;
+    const settings = window.OrthosStore.getSettings();
+    if (settings && settings.announcement && settings.announcement.enabled && settings.announcement.text) {
+      banner.className = `announcement-banner ${settings.announcement.type || 'info'}`;
+      banner.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span>${settings.announcement.text}</span>
+        <a href="#contact">Book Consultation →</a>
+      `;
+      banner.style.display = 'flex';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
+  function renderLiveBlogs() {
+    const grid = document.getElementById('blogsGrid');
+    if (!grid || !window.OrthosStore) return;
+    const blogs = window.OrthosStore.getBlogs();
+    if (!blogs || !blogs.length) return;
+
+    grid.innerHTML = blogs.map((b, idx) => `
+      <article class="blog-card">
+        <div class="blog-thumb">
+          <img src="${b.img}" alt="${b.title}" />
+          <span class="blog-tag">${b.category}</span>
+        </div>
+        <div class="blog-body">
+          <div class="blog-meta">
+            <span>${b.author || 'Dr. Prashant Agrawal'}</span>
+            <span>·</span>
+            <span>${b.readTime || '5 min read'}</span>
+          </div>
+          <h3 class="blog-title">${b.title}</h3>
+          <p class="blog-excerpt">${b.excerpt || ''}</p>
+          <button class="blog-read-btn" onclick="openBlogModal(${idx})">Read Full Guide →</button>
+        </div>
+      </article>
+    `).join('');
+  }
+
+  function renderLiveSchedules() {
+    if (!window.OrthosStore) return;
+    const sch = window.OrthosStore.getSchedules();
+    if (!sch) return;
+
+    const seaCard = document.querySelector('.schedule-card.featured');
+    if (seaCard && sch.seawoods) {
+      const rows = seaCard.querySelectorAll('.timing-row');
+      if (rows.length >= 3) {
+        if (sch.seawoods.timing || sch.seawoods.morning) {
+          rows[0].querySelector('.time').textContent = (sch.seawoods.timing || sch.seawoods.morning).replace(' EVERY DAY', '');
+        }
+        if (sch.seawoods.evening) rows[1].querySelector('.time').textContent = sch.seawoods.evening;
+        if (sch.seawoods.phone || sch.seawoods.sunday) rows[2].querySelector('.time').textContent = sch.seawoods.phone || sch.seawoods.sunday;
+      }
+    }
+
+    const cards = document.querySelectorAll('.schedule-grid .schedule-card');
+    if (cards.length > 1 && sch.apollo) {
+      const rows = cards[1].querySelectorAll('.timing-row');
+      if (rows.length >= 3) {
+        if (sch.apollo.timing || sch.apollo.afternoon) {
+          rows[0].querySelector('.time').textContent = (sch.apollo.timing || sch.apollo.afternoon).replace(' EVERY DAY', '');
+        }
+        if (sch.apollo.surgeries) rows[1].querySelector('.time').textContent = sch.apollo.surgeries;
+        if (sch.apollo.inpatient) rows[2].querySelector('.time').textContent = sch.apollo.inpatient;
+      }
+    }
+  }
+
+  // Live store sync
+  function refreshLiveStoreUI() {
+    renderLiveAnnouncement();
+    renderLiveBlogs();
+    renderLiveSchedules();
+  }
+
+  window.addEventListener('orthos-store-updated', refreshLiveStoreUI);
+  window.addEventListener('storage', refreshLiveStoreUI);
 
   /* ---------- Legal Modals ---------- */
   window.openLegalModal = function (type) {
@@ -641,10 +764,14 @@
     const path = window.location.pathname.toLowerCase();
     const hash = window.location.hash.toLowerCase();
 
+    refreshLiveStoreUI();
+
     if (path.includes('terms') || hash === '#terms') {
       openLegalModal('terms');
     } else if (path.includes('privacy') || hash === '#privacy') {
       openLegalModal('privacy');
+    } else if (path.includes('admin') || path.includes('login') || hash === '#admin') {
+      window.location.href = '/admin.html';
     } else if (path.includes('about') || hash === '#about') {
       document.querySelector('#about')?.scrollIntoView({ behavior: 'smooth' });
     } else if (path.includes('services') || path.includes('joint') || hash === '#services') {
